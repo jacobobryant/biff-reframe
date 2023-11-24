@@ -92,33 +92,37 @@
       (map message (sort-by :msg/sent-at #(compare %2 %1) messages))]]))
 
 (defn app [{:keys [session biff/db] :as ctx}]
-  (let [{:user/keys [email foo bar]} (xt/entity db (:uid session))]
-    (ui/page
-     {}
-     [:div "Signed in as " email ". "
-      (biff/form
-       {:action "/auth/signout"
-        :class "inline"}
-       [:button.text-blue-500.hover:text-blue-800 {:type "submit"}
-        "Sign out"])
-      "."]
-     [:.h-6]
-     (biff/form
-      {:action "/app/set-foo"}
-      [:label.block {:for "foo"} "Foo: "
-       [:span.font-mono (pr-str foo)]]
-      [:.h-1]
-      [:.flex
-       [:input.w-full#foo {:type "text" :name "foo" :value foo}]
-       [:.w-3]
-       [:button.btn {:type "submit"} "Update"]]
-      [:.h-1]
-      [:.text-sm.text-gray-600
-       "This demonstrates updating a value with a plain old form."])
-     [:.h-6]
-     (bar-form {:value bar})
-     [:.h-6]
-     (chat ctx))))
+  (ui/base
+   {}
+   [:div#app]
+   [:script {:src "/cljs/app.js"}])
+  #_(let [{:user/keys [email foo bar]} (xt/entity db (:uid session))]
+      (ui/page
+       {}
+       [:div "Signed in as " email ". "
+        (biff/form
+          {:action "/auth/signout"
+           :class "inline"}
+          [:button.text-blue-500.hover:text-blue-800 {:type "submit"}
+           "Sign out"])
+        "."]
+       [:.h-6]
+       (biff/form
+         {:action "/app/set-foo"}
+         [:label.block {:for "foo"} "Foo: "
+          [:span.font-mono (pr-str foo)]]
+         [:.h-1]
+         [:.flex
+          [:input.w-full#foo {:type "text" :name "foo" :value foo}]
+          [:.w-3]
+          [:button.btn {:type "submit"} "Update"]]
+         [:.h-1]
+         [:.text-sm.text-gray-600
+          "This demonstrates updating a value with a plain old form."])
+       [:.h-6]
+       (bar-form {:value bar})
+       [:.h-6]
+       (chat ctx))))
 
 (defn ws-handler [{:keys [com.biffweb.examples.reframe/chat-clients] :as ctx}]
   {:status 101

@@ -10,3 +10,5 @@
 .clj-kondo/
 .lsp/
 .portal/
+node_modules
+.shadow-cljs/
