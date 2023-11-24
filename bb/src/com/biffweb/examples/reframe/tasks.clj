@@ -24,9 +24,12 @@
   (when (fs/exists? "package.json")
     (tasks/shell "npm" "install"))
   (biff-tasks/future-verbose (biff-tasks/css "--watch"))
+  (biff-tasks/future-verbose (biff-tasks/shell "npx shadow-cljs watch app"))
   (spit ".nrepl-port" "7888")
   (apply clojure {:extra-env (merge (biff-tasks/secrets) {"BIFF_ENV" "dev"})}
          (concat args (biff-tasks/run-args))))
+
+(def cljs-output "target/resources/public/cljs/app.js")
 
 (defn- push-files-rsync []
   (let [{:biff.tasks/keys [server]} @biff-tasks/config
@@ -36,7 +39,8 @@
                    distinct
                    (concat ["config.edn"
                             "secrets.env"
-                            biff-tasks/css-output])
+                            biff-tasks/css-output
+                            cljs-output])
                    (filter fs/exists?))]
     (when-not (biff-tasks/windows?)
       (fs/set-posix-file-permissions "config.edn" "rw-------")
@@ -54,8 +58,11 @@
                                     (when (fs/exists? "secrets.env") ["secrets.env"])
                                     [(str "app@" server ":")]))
     (when (fs/exists? biff-tasks/css-output)
-      (biff-tasks/shell "ssh" (str "app@" server) "mkdir" "-p" "target/resources/public/css/")
-      (biff-tasks/shell "scp" biff-tasks/css-output (str "app@" server ":" biff-tasks/css-output)))
+      (biff-tasks/shell "ssh" (str "app@" server) "mkdir" "-p"
+                        "target/resources/public/css/"
+                        "target/resources/public/cljs/")
+      (biff-tasks/shell "scp" biff-tasks/css-output (str "app@" server ":" biff-tasks/css-output))
+      (biff-tasks/shell "scp" cljs-output (str "app@" server ":" cljs-output)))
     (time (if deploy-cmd
             (apply biff-tasks/shell deploy-cmd)
             ;; For backwards compatibility
@@ -76,6 +83,7 @@
   (biff-tasks/with-ssh-agent
     (let [{:biff.tasks/keys [soft-deploy-fn on-soft-deploy]} @biff-tasks/config]
       (biff-tasks/css "--minify")
+      (biff-tasks/shell "npx shadow-cljs release app")
       (push-files)
       (biff-tasks/trench
        (or on-soft-deploy
@@ -93,5 +101,6 @@
   []
   (biff-tasks/with-ssh-agent
    (biff-tasks/css "--minify")
+   (biff-tasks/shell "npx shadow-cljs release app")
    (push-files)
    (biff-tasks/restart)))

@@ -12,7 +12,6 @@
          restart          com.biffweb.tasks/restart
          logs             com.biffweb.tasks/logs
          prod-repl        com.biffweb.tasks/prod-repl
-         prod-dev         com.biffweb.tasks/prod-dev
 
          ;; Internal tasks called by Biff in production.
          run-cmd          com.biffweb.tasks/run-cmd}}
