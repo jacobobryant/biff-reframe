@@ -1,5 +1,7 @@
-# Biff example project
+# How to use re-frame with Biff
 
-This is the example/template project for Biff.
+This is an example of using re-frame instead of htmx with [Biff](https://biffweb.com). See [How to use re-frame with
+Biff](https://biffweb.com/p/how-to-use-reframe-with-biff/) for commentary. To try it out:
 
-Run `bb dev` to get started. See `bb tasks` for other commands.
+1. Run `bb generate-secrets` and save the values to `secrets.env`.
+2. Run `bb dev` like usual.
