@@ -4,9 +4,7 @@
    [re-frame.core :as re-frame]
    [com.biffweb.examples.reframe.app.events :as events]
    [com.biffweb.examples.reframe.app.views :as views]
-   [com.biffweb.examples.reframe.app.config :as config]
-   ))
-
+   [com.biffweb.examples.reframe.app.config :as config]))
 
 (defn dev-setup []
   (when config/debug?
@@ -20,5 +18,7 @@
 
 (defn init []
   (re-frame/dispatch-sync [::events/initialize-db])
+  (re-frame/dispatch [::events/remote-init])
+  (re-frame/dispatch [::events/join-chat])
   (dev-setup)
   (mount-root))

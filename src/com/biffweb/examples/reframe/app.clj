@@ -3,9 +3,11 @@
             [com.biffweb.examples.reframe.middleware :as mid]
             [com.biffweb.examples.reframe.ui :as ui]
             [com.biffweb.examples.reframe.settings :as settings]
+            [clojure.edn :as edn]
             [rum.core :as rum]
             [xtdb.api :as xt]
             [ring.adapter.jetty9 :as jetty]
+            [ring.middleware.anti-forgery :as csrf]
             [cheshire.core :as cheshire]))
 
 (defn set-foo [{:keys [session params] :as ctx}]
@@ -14,23 +16,8 @@
       :db/doc-type :user
       :xt/id (:uid session)
       :user/foo (:foo params)}])
-  {:status 303
-   :headers {"location" "/app"}})
-
-(defn bar-form [{:keys [value]}]
-  (biff/form
-   {:hx-post "/app/set-bar"
-    :hx-swap "outerHTML"}
-   [:label.block {:for "bar"} "Bar: "
-    [:span.font-mono (pr-str value)]]
-   [:.h-1]
-   [:.flex
-    [:input.w-full#bar {:type "text" :name "bar" :value value}]
-    [:.w-3]
-    [:button.btn {:type "submit"} "Update"]]
-   [:.h-1]
-   [:.text-sm.text-gray-600
-    "This demonstrates updating a value with HTMX."]))
+  {:status 200
+   :body {:foo (:foo params)}})
 
 (defn set-bar [{:keys [session params] :as ctx}]
   (biff/submit-tx ctx
@@ -38,91 +25,44 @@
       :db/doc-type :user
       :xt/id (:uid session)
       :user/bar (:bar params)}])
-  (biff/render (bar-form {:value (:bar params)})))
+  {:status 200
+   :body {:bar (:bar params)}})
 
-(defn message [{:msg/keys [text sent-at]}]
-  [:.mt-3 {:_ "init send newMessage to #message-header"}
-   [:.text-gray-600 (biff/format-date sent-at "dd MMM yyyy HH:mm:ss")]
-   [:div text]])
+(defn send-message [{:keys [session] :as ctx} {:keys [text]}]
+  (biff/submit-tx ctx
+    [{:db/doc-type :msg
+      :msg/user (:uid session)
+      :msg/text text
+      :msg/sent-at :db/now}]))
 
 (defn notify-clients [{:keys [com.biffweb.examples.reframe/chat-clients]} tx]
   (doseq [[op & args] (::xt/tx-ops tx)
           :when (= op ::xt/put)
           :let [[doc] args]
           :when (contains? doc :msg/text)
-          :let [html (rum/render-static-markup
-                      [:div#messages {:hx-swap-oob "afterbegin"}
-                       (message doc)])]
           ws @chat-clients]
-    (jetty/send! ws html)))
+    (jetty/send! ws (pr-str doc))))
 
-(defn send-message [{:keys [session] :as ctx} {:keys [text]}]
-  (let [{:keys [text]} (cheshire/parse-string text true)]
-    (biff/submit-tx ctx
-      [{:db/doc-type :msg
-        :msg/user (:uid session)
-        :msg/text text
-        :msg/sent-at :db/now}])))
+(defn sign-out! [{:keys [session] :as ctx}]
+  {:status 204
+   :session nil})
 
-(defn chat [{:keys [biff/db]}]
-  (let [messages (q db
-                    '{:find (pull msg [*])
-                      :in [t0]
-                      :where [[msg :msg/sent-at t]
-                              [(<= t0 t)]]}
-                    (biff/add-seconds (java.util.Date.) (* -60 10)))]
-    [:div {:hx-ext "ws" :ws-connect "/app/chat"}
-     [:form.mb-0 {:ws-send true
-                  :_ "on submit set value of #message to ''"}
-      [:label.block {:for "message"} "Write a message"]
-      [:.h-1]
-      [:textarea.w-full#message {:name "text"}]
-      [:.h-1]
-      [:.text-sm.text-gray-600
-       "Sign in with an incognito window to have a conversation with yourself."]
-      [:.h-2]
-      [:div [:button.btn {:type "submit"} "Send message"]]]
-     [:.h-6]
-     [:div#message-header
-      {:_ "on newMessage put 'Messages sent in the past 10 minutes:' into me"}
-      (if (empty? messages)
-        "No messages yet."
-        "Messages sent in the past 10 minutes:")]
-     [:div#messages
-      (map message (sort-by :msg/sent-at #(compare %2 %1) messages))]]))
+(defn init [{:keys [session biff/db] :as ctx}]
+  {:status 200
+   :body {:current-user (xt/entity db (:uid session))
+          :csrf-token csrf/*anti-forgery-token*
+          :messages (q db
+                       '{:find (pull msg [*])
+                         :in [t0]
+                         :where [[msg :msg/sent-at t]
+                                 [(<= t0 t)]]}
+                       (biff/add-seconds (java.util.Date.) (* -60 10)))}})
 
 (defn app [{:keys [session biff/db] :as ctx}]
   (ui/base
    {}
-   [:div#app]
-   [:script {:src "/cljs/app.js"}])
-  #_(let [{:user/keys [email foo bar]} (xt/entity db (:uid session))]
-      (ui/page
-       {}
-       [:div "Signed in as " email ". "
-        (biff/form
-          {:action "/auth/signout"
-           :class "inline"}
-          [:button.text-blue-500.hover:text-blue-800 {:type "submit"}
-           "Sign out"])
-        "."]
-       [:.h-6]
-       (biff/form
-         {:action "/app/set-foo"}
-         [:label.block {:for "foo"} "Foo: "
-          [:span.font-mono (pr-str foo)]]
-         [:.h-1]
-         [:.flex
-          [:input.w-full#foo {:type "text" :name "foo" :value foo}]
-          [:.w-3]
-          [:button.btn {:type "submit"} "Update"]]
-         [:.h-1]
-         [:.text-sm.text-gray-600
-          "This demonstrates updating a value with a plain old form."])
-       [:.h-6]
-       (bar-form {:value bar})
-       [:.h-6]
-       (chat ctx))))
+   [:div#app.flex.flex-col.grow]
+   [:script {:src "/cljs/app.js"}]))
 
 (defn ws-handler [{:keys [com.biffweb.examples.reframe/chat-clients] :as ctx}]
   {:status 101
@@ -130,8 +70,8 @@
              "connection" "upgrade"}
    :ws {:on-connect (fn [ws]
                       (swap! chat-clients conj ws))
-        :on-text (fn [ws text-message]
-                   (send-message ctx {:ws ws :text text-message}))
+        :on-text (fn [ws params]
+                   (send-message ctx (edn/read-string params)))
         :on-close (fn [ws status-code reason]
                     (swap! chat-clients disj ws))}})
 
@@ -150,6 +90,8 @@
   {:static {"/about/" about-page}
    :routes ["/app" {:middleware [mid/wrap-signed-in]}
             ["" {:get app}]
+            ["/init" {:get init}]
+            ["/sign-out" {:post sign-out!}]
             ["/set-foo" {:post set-foo}]
             ["/set-bar" {:post set-bar}]
             ["/chat" {:get ws-handler}]]
